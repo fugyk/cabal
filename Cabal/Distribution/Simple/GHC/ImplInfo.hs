@@ -105,6 +105,7 @@ ghcjsVersionImplInfo _ghcjsVer _ghcVer = GhcImplInfo
   , flagGhciScript       = True
   , flagPackageConf      = False
   , flagDebugInfo        = False
+  , supportsMultInst     = False
   }
 
 lhcVersionImplInfo :: Version -> GhcImplInfo
