@@ -23,6 +23,7 @@ import Distribution.Client.Setup
          , buildCommand, replCommand, testCommand, benchmarkCommand
          , InstallFlags(..), defaultInstallFlags
          , installCommand, upgradeCommand, uninstallCommand
+         , gcCommand
          , FetchFlags(..), fetchCommand
          , FreezeFlags(..), freezeCommand
          , GetFlags(..), getCommand, unpackCommand
@@ -73,6 +74,7 @@ import Distribution.Client.Fetch              (fetch)
 import Distribution.Client.Freeze             (freeze)
 import Distribution.Client.Check as Check     (check)
 --import Distribution.Client.Clean            (clean)
+import Distribution.Client.GC                 (gcAction)
 import Distribution.Client.Upload as Upload   (upload, check, report)
 import Distribution.Client.Run                (run, splitRunArgs)
 import Distribution.Client.HttpUtils          (configureTransport)
@@ -260,6 +262,7 @@ mainWorker args = topHandler $
                      regVerbosity      regDistPref
       ,testCommand            `commandAddAction` testAction
       ,benchmarkCommand       `commandAddAction` benchmarkAction
+      ,gcCommand              `commandAddAction`    gcAction
       ,hiddenCommand $
        uninstallCommand       `commandAddAction` uninstallAction
       ,hiddenCommand $
@@ -842,6 +845,7 @@ benchmarkAction (benchmarkFlags, buildFlags, buildExFlags)
       maybeWithSandboxDirOnSearchPath useSandbox $
         setupWrapper verbosity setupOptions Nothing
           Cabal.benchmarkCommand (const benchmarkFlags') extraArgs'
+
 
 haddockAction :: HaddockFlags -> [String] -> GlobalFlags -> IO ()
 haddockAction haddockFlags extraArgs globalFlags = do
