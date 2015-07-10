@@ -23,6 +23,7 @@ module Distribution.Client.Setup
     , updateCommand
     , upgradeCommand
     , uninstallCommand
+    , gcCommand
     , infoCommand, InfoFlags(..)
     , fetchCommand, FetchFlags(..)
     , freezeCommand, FreezeFlags(..)
@@ -869,6 +870,16 @@ uninstallCommand = CommandUI {
     commandOptions      = \_ -> []
   }
 
+gcCommand :: CommandUI (Flag Verbosity)
+gcCommand = CommandUI {
+    commandName = "collect-garbage",
+    commandSynopsis = "Free unreachable packages by deleting files and unregistering",
+    commandDescription = Nothing,
+    commandNotes = Nothing,
+    commandUsage = \pname -> "Usage: " ++ pname ++ " collect-garbage\n",
+    commandDefaultFlags = toFlag normal,
+    commandOptions      = \_ -> []
+  }
 runCommand :: CommandUI (BuildFlags, BuildExFlags)
 runCommand = CommandUI {
     commandName         = "run",
