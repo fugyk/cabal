@@ -83,7 +83,7 @@ executable cabal
         Distribution.Client.Fetch
         Distribution.Client.FetchUtils
         Distribution.Client.Freeze
-        Distribution.Client.Install
+        Distribution.Client.GC
         Distribution.Client.Get
         Distribution.Client.GZipUtils
         Distribution.Client.Haddock

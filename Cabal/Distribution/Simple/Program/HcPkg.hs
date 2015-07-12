@@ -321,7 +321,22 @@ removePackageFromView hpi verbosity view packageId =
            packageId,
            packageDbOpts hpi UserPackageDB]
 
+getPackagesInView :: HcPkgInfo -> Verbosity
+                  -> String -> IO [InstalledPackageId]
+getPackagesInView hpi verbosity view =
+  if (supportsView hpi)
+    then do
+      output <- getProgramInvocationOutput verbosity invocation
+      case parseipids output of
+        Just ok -> return ok
+        _       -> die $ "failed to parse output of '"
+                       ++ programId (hcPkgProgram hpi) ++ List.intercalate " " args ++ "'"
+    else die "View not supported"
 
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["view", "list-packages", view]
+    parseipids = sequence . map simpleParse . lines
 -- TODO:
 -- getPackagesInView -- For GC
 
