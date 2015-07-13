@@ -38,7 +38,10 @@ module Distribution.Simple.Register (
     multInstEnabled,
     viewSupported,
     createView,
-    addPackageToView
+    addPackageToView,
+    getPackagesInView,
+    listViews
+
   ) where
 
 import Distribution.Simple.LocalBuildInfo
@@ -270,12 +273,26 @@ viewSupported comp conf = case getHcPkgInfo comp conf of
 createView :: Verbosity -> Compiler -> ProgramConfiguration
            -> Either String FilePath -> IO ()
 createView verbosity comp conf view =
-  withHcPkg "createView" comp conf (\hpi -> HcPkg.createView hpi verbosity view)
+  withHcPkg "createView" comp conf
+    (\hpi -> HcPkg.createView hpi verbosity view)
 
 addPackageToView :: Verbosity -> Compiler -> ProgramConfiguration
                  -> String -> InstalledPackageId -> IO ()
 addPackageToView verbosity comp conf view_name ipid =
-  withHcPkg "addPackageToView" comp conf (\hpi -> HcPkg.addPackageToView hpi verbosity view_name ipid)
+  withHcPkg "addPackageToView" comp conf
+    (\hpi -> HcPkg.addPackageToView hpi verbosity view_name ipid)
+
+getPackagesInView :: Verbosity -> Compiler -> ProgramConfiguration
+                  -> String -> IO [InstalledPackageId]
+getPackagesInView verbosity comp conf view_name =
+  withHcPkg "getPackagesInView" comp conf
+    (\hpi -> HcPkg.getPackagesInView hpi verbosity view_name)
+
+listViews :: Verbosity -> Compiler -> ProgramConfiguration -> IO [String]
+listViews verbosity comp conf =
+  withHcPkg "listViews" comp conf
+    (\hpi -> HcPkg.listViews hpi verbosity)
+
 
 registerPackage :: Verbosity
                 -> InstalledPackageInfo

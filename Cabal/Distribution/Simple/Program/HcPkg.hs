@@ -26,6 +26,8 @@ module Distribution.Simple.Program.HcPkg (
     createView,
     addPackageToView,
     removePackageFromView,
+    getPackagesInView,
+    listViews,
 
     -- * Program invocations
     initInvocation,
@@ -330,13 +332,33 @@ getPackagesInView hpi verbosity view =
       case parseipids output of
         Just ok -> return ok
         _       -> die $ "failed to parse output of '"
-                       ++ programId (hcPkgProgram hpi) ++ List.intercalate " " args ++ "'"
+                       ++ programId (hcPkgProgram hpi)
+                       ++ List.intercalate " " args ++ "'"
     else die "View not supported"
 
   where
     invocation = programInvocation (hcPkgProgram hpi) args
-    args = ["view", "list-packages", view]
+    args = ["view",
+           "list-packages",
+           view,
+           packageDbOpts hpi UserPackageDB]
     parseipids = sequence . map simpleParse . lines
+
+listViews :: HcPkgInfo -> Verbosity -> IO [String]
+listViews hpi verbosity =
+  if (supportsView hpi)
+    then do
+      output <- getProgramInvocationOutput verbosity invocation
+      return (parseipids output)
+    else die "View not supported"
+
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["view", "list-views",
+           "--simple-output",
+           packageDbOpts hpi UserPackageDB]
+    parseipids = lines
+
 -- TODO:
 -- getPackagesInView -- For GC
 
