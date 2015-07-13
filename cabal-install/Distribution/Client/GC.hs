@@ -11,9 +11,15 @@ import Distribution.Client.Config ( loadConfig
 import Distribution.Simple.Configure ( configCompilerAuxEx
                                      , getInstalledPackages)
 import Distribution.Simple.Compiler ( PackageDB(..) )
-import Distribution.Simple.PackageIndex ( allPackages )
+import Distribution.Simple.PackageIndex ( dependencyClosure, allPackages )
 
 import Distribution.Package (packageId)
+import Distribution.Simple.Register ( listViews, getPackagesInView )
+import Distribution.InstalledPackageInfo ( installedPackageId )
+import Distribution.Text ( display )
+
+import Data.List ( deleteFirstsBy, intercalate )
+import Data.Function ( on )
 
 -- | Garbage collect unreachable package in dependency graph
 -- with exposed packages and package in any view as roots.
@@ -23,15 +29,20 @@ gcAction (Flag verbosity) _ globalFlags = do
     (comp, _, conf) <- configCompilerAuxEx (savedConfigureFlags savedConfig)
     allPkgsIndex <- getInstalledPackages verbosity comp pkgdbs conf
     let allPkgs = allPackages allPkgsIndex
-    print $ map (display. packageId) allPkgs
-    rootPkgs <- concatM $ (getPackagesInView <<= listViews)
-    -- reachablePkgs <- makeGraph rootPkgs
-    -- unreachablePkgs <- all_pkgs - reachablePkgs
-    -- notice vebosity "These packages will be removed"
-    -- notice verbosity $ intersperse '\n' (map ipid unreachablePkgs)
+    viewList <- listViews verbosity comp conf
+    rootPkgsPerView <- mapM (\v -> getPackagesInView verbosity comp conf v)
+                         viewList
+    let rootPkgs = concat rootPkgsPerView
+        depClosure = dependencyClosure allPkgsIndex rootPkgs
+        reachablePkgs = case depClosure of
+                          Left reachableIndex -> allPackages reachableIndex
+        unreachablePkgs = deleteFirstsBy ((==) `on` installedPackageId)
+                            allPkgs reachablePkgs
+    notice verbosity "These packages will be removed"
+    mapM_ (notice verbosity) (map (display . installedPackageId) unreachablePkgs)
     -- mapM_ (deleteFolder . libraryLocation) unreachablePkgs
-    -- unregister unreachablePkgs
+    -- mapM_ unregister unreachablePkgs
   where
-    -- Its a bit of hack to specify exact DB in source, but we want it to GC
+    -- Its a bit of hack to specify exact DB in source, but we want to GC
     -- only in User package DB
     pkgdbs = [UserPackageDB]
