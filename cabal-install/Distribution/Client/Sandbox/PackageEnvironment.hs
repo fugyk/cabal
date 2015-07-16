@@ -259,7 +259,7 @@ setPackageDB sandboxDir compiler platform configFlags conf =
 
 
 -- | A general purpose hash function. It is exported as the hash
--- of sanbox dir needs to be calculated in two different modules.
+-- of sandbox dir needs to be calculated in two different modules.
 -- See http://en.wikipedia.org/wiki/Jenkins_hash_function
 sandboxDirHash :: FilePath -> String
 sandboxDirHash str = showHex (loop_finish $ foldl' loop 0 str) ""

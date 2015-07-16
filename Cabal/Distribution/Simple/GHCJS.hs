@@ -873,7 +873,7 @@ hcPkgInfo conf = HcPkg.HcPkgInfo { HcPkg.hcPkgProgram    = ghcjsPkgProg
                                  , HcPkg.noVerboseFlag   = False
                                  , HcPkg.flagPackageConf = False
                                  , HcPkg.useSingleFileDb = v < [7,9]
-                                 , HcPkg.multInstEnabled = False
+                                 , HcPkg.supportsMultInst= False
                                  , HcPkg.supportsView    = False
                                  }
   where
