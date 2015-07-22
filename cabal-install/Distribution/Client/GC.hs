@@ -19,7 +19,7 @@ module Distribution.Client.GC
 import Distribution.Simple.Utils ( notice )
 import Distribution.Verbosity ( Verbosity )
 import Distribution.Simple.Setup ( Flag(..)
-                                  , configPackageDBs)
+                                 , fromFlag)
 import Distribution.Client.Setup ( GlobalFlags
                                  , globalConfigFile)
 import Distribution.Client.Config ( loadConfig
@@ -30,19 +30,17 @@ import Distribution.Simple.PackageIndex ( dependencyClosure, allPackages )
 import Distribution.Client.Sandbox ( configCompilerAux'
                                    , configPackageDB')
 import Distribution.InstalledPackageInfo ( installedPackageId, exposed )
-import Distribution.Package (packageId)
 import Distribution.Simple.Register ( listViews, getPackagesInView )
-import Distribution.InstalledPackageInfo ( installedPackageId )
 import Distribution.Text ( display )
 
-import Data.List ( deleteFirstsBy, intercalate )
+import Data.List ( deleteFirstsBy)
 import Data.Function ( on )
 import Control.Monad ( when )
 
 -- | Garbage collect unreachable package in dependency graph
 -- with exposed packages and package in any view as roots.
 gcAction :: Flag Verbosity -> [String] -> GlobalFlags -> IO ()
-gcAction (Flag verbosity) _ globalFlags = do
+gcAction flagVerbosity _ globalFlags = do
     savedConfig <- loadConfig verbosity (globalConfigFile globalFlags)
     (comp, _, conf) <- configCompilerAux' (savedConfigureFlags savedConfig)
     allPkgsIndex <- getInstalledPackages verbosity comp
@@ -64,6 +62,7 @@ gcAction (Flag verbosity) _ globalFlags = do
         depClosure = dependencyClosure allPkgsIndex rootPkgs
         reachablePkgs = case depClosure of
                           Left reachableIndex -> allPackages reachableIndex
+                          Right _ -> error brokenPkgsMsgs
         unreachablePkgs = deleteFirstsBy ((==) `on` installedPackageId)
                             allPkgs reachablePkgs
     notice verbosity "These packages will be removed"
@@ -71,7 +70,11 @@ gcAction (Flag verbosity) _ globalFlags = do
       (map (display . installedPackageId) unreachablePkgs)
     putStrLn "Do you want to continue (y/n):"
     opt <- getLine
-    when (opt == "y")
-      do -- mapM_ (deleteFolder . libraryLocation) unreachablePkgs
-         mapM_ unregister unreachablePkgs
+    when (opt == "y") $ print "a"
+      -- do mapM_ (deleteFolder . libraryLocation) unreachablePkgs
+      --   mapM_ unregister unreachablePkgs
+  where
+    brokenPkgsMsgs = "There are some broken packages. GC cannot coninue. " ++
+                     "Run 'ghc-pkg check' for more info"
+    verbosity = fromFlag flagVerbosity
 

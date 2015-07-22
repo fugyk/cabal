@@ -90,7 +90,7 @@ import Distribution.ReadE
 import qualified Distribution.Compat.ReadP as Parse
          ( ReadP, readP_to_S, readS_to_P, char, munch1, pfail, sepBy1, (+++) )
 import Distribution.Verbosity
-         ( Verbosity, normal )
+         ( Verbosity, normal, deafening )
 import Distribution.Simple.Utils
          ( wrapText, wrapLine )
 
@@ -882,7 +882,7 @@ gcCommand = CommandUI {
     commandDescription = Nothing,
     commandNotes = Nothing,
     commandUsage = \pname -> "Usage: " ++ pname ++ " collect-garbage\n",
-    commandDefaultFlags = toFlag normal,
+    commandDefaultFlags = toFlag deafening,
     commandOptions      = \_ -> []
   }
 runCommand :: CommandUI (BuildFlags, BuildExFlags)
