@@ -246,8 +246,8 @@ setPackageDB :: FilePath -> Compiler -> Platform -> ConfigFlags ->
 setPackageDB sandboxDir compiler platform configFlags conf =
   if viewSupported
     then configFlags {
-      configPackageDBs = [Just UserPackageDB],
-      configView = Flag $ sandboxDirHash sandboxDir
+      configPackageDBs = [Just UserPackageDB]
+      --configView = Flag $ sandboxDirHash sandboxDir
     }
     else configFlags {
       configPackageDBs = [Just (SpecificPackageDB $ sandboxPackageDBPath

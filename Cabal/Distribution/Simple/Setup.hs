@@ -314,7 +314,6 @@ data ConfigFlags = ConfigFlags {
     configVerbosity :: Flag Verbosity, -- ^verbosity level
     configUserInstall :: Flag Bool,    -- ^The --user\/--global flag
     configPackageDBs :: [Maybe PackageDB], -- ^Which package DBs to use
-    configView      :: Flag String,    -- ^Which view to use
     configGHCiLib   :: Flag Bool,      -- ^Enable compiling library for GHCi
     configSplitObjs :: Flag Bool,      -- ^Enable -split-objs with GHC
     configStripExes :: Flag Bool,      -- ^Enable executable stripping
@@ -564,11 +563,6 @@ configureOptions showOrParseArgs =
          configPackageDBs (\v flags -> flags { configPackageDBs = v })
          (reqArg' "DB" readPackageDbList showPackageDbList)
 
-      ,option "" ["view"]
-         "Use the given view"
-         configView (\v flags -> flags { configView = v })
-         (reqArgFlag "VIEW")
-
       ,option "f" ["flags"]
          "Force values for the given flags in Cabal conditionals in the .cabal file.  E.g., --flags=\"debug -usebytestrings\" forces the flag \"debug\" to true and \"usebytestrings\" to false."
          configConfigurationsFlags (\v flags -> flags { configConfigurationsFlags = v })
@@ -792,7 +786,6 @@ instance Monoid ConfigFlags where
     configVerbosity     = mempty,
     configUserInstall   = mempty,
     configPackageDBs    = mempty,
-    configView          = mempty,
     configGHCiLib       = mempty,
     configSplitObjs     = mempty,
     configStripExes     = mempty,
@@ -838,7 +831,6 @@ instance Monoid ConfigFlags where
     configVerbosity     = combine configVerbosity,
     configUserInstall   = combine configUserInstall,
     configPackageDBs    = combine configPackageDBs,
-    configView          = combine configView,
     configGHCiLib       = combine configGHCiLib,
     configSplitObjs     = combine configSplitObjs,
     configStripExes     = combine configStripExes,

@@ -1140,7 +1140,7 @@ performInstallations verbosity
     view pkg = if (Register.multInstEnabled comp conf)
                  then
                    if pkgSpecifierTarget pkgSpecifier == (packageName $ packageId pkg)
-                     then configView configFlags
+                     then configView configExFlags
                      else Cabal.NoFlag
                  else Cabal.Flag "default"
 

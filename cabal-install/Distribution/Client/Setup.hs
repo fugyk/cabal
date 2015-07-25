@@ -457,7 +457,8 @@ data ConfigExFlags = ConfigExFlags {
     configExConstraints:: [UserConstraint],
     configPreferences  :: [Dependency],
     configSolver       :: Flag PreSolver,
-    configAllowNewer   :: Flag AllowNewer
+    configAllowNewer   :: Flag AllowNewer,
+    configView         :: Flag String    -- ^Which view to use
   }
 
 defaultConfigExFlags :: ConfigExFlags
@@ -509,6 +510,10 @@ configureExOptions _showOrParseArgs =
     (optArg allowNewerArgument
      (fmap Flag allowNewerParser) (Flag AllowNewerAll)
      allowNewerPrinter)
+  , option "" ["view"]
+      "Use the given view"
+      configView (\v flags -> flags { configView = v })
+      (reqArgFlag "VIEW")
 
   ]
   where allowNewerArgument = "DEPS"
@@ -519,14 +524,16 @@ instance Monoid ConfigExFlags where
     configExConstraints= mempty,
     configPreferences  = mempty,
     configSolver       = mempty,
-    configAllowNewer   = mempty
+    configAllowNewer   = mempty,
+    configView         = mempty
   }
   mappend a b = ConfigExFlags {
     configCabalVersion = combine configCabalVersion,
     configExConstraints= combine configExConstraints,
     configPreferences  = combine configPreferences,
     configSolver       = combine configSolver,
-    configAllowNewer   = combine configAllowNewer
+    configAllowNewer   = combine configAllowNewer,
+    configView          = combine configView
   }
     where combine field = field a `mappend` field b
 
