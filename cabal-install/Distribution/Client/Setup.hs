@@ -533,7 +533,7 @@ instance Monoid ConfigExFlags where
     configPreferences  = combine configPreferences,
     configSolver       = combine configSolver,
     configAllowNewer   = combine configAllowNewer,
-    configView          = combine configView
+    configView         = combine configView
   }
     where combine field = field a `mappend` field b
 
@@ -833,6 +833,19 @@ upgradeCommand = configureCommand {
     commandOptions      = commandOptions installCommand
   }
 
+upgradeAllCommand  :: CommandUI (Flag Verbosity)
+upgradeAllCommand = configureCommand {
+    commandName         = "upgrade",
+    commandSynopsis     = "Upgrades installed packages",
+    commandDescription  = Just $ \_ -> wrapText $
+      "Upgrades the packages installed from repo. It does not upgrades " ++
+      "packages installed from source. If there is a constraint on package " ++
+      "while installing, then the constraint will be respected while upgrading",
+    commandUsage        = usageFlagsOrPackages "upgrade",
+    commandDefaultFlags = toFlag normal,
+    commandOptions      = \_ -> [optionVerbosity id const]
+  }
+
 {-
 cleanCommand  :: CommandUI ()
 cleanCommand = makeCommand name shortDesc longDesc emptyFlags options
@@ -874,8 +887,11 @@ formatCommand = CommandUI {
 uninstallCommand  :: CommandUI (Flag Verbosity)
 uninstallCommand = CommandUI {
     commandName         = "uninstall",
-    commandSynopsis     = "Warn about 'uninstall' not being implemented.",
-    commandDescription  = Nothing,
+    commandSynopsis     = "Uninstalls the packages.",
+    commandDescription  = Just $ \_ -> wrapText $
+                            "This command uninstalls the paxckages, but does" ++
+                            "free disk space. To free disk space after " ++
+                            "uninstalling, use `cabal garbage-collect`",
     commandNotes        = Nothing,
     commandUsage        = usageAlternatives "uninstall" ["PACKAGES"],
     commandDefaultFlags = toFlag normal,

@@ -133,6 +133,8 @@ import Distribution.Simple.Command
          , commandsRun, commandAddAction, hiddenCommand )
 import Distribution.Simple.Compiler
          ( Compiler(..) )
+import Distribution.Simple.Register
+         ( getPackagesInView )
 import Distribution.Simple.Configure
          ( checkPersistBuildConfigOutdated, configCompilerAuxEx
          , ConfigStateFileError(..), localBuildInfoFile
@@ -943,6 +945,17 @@ upgradeAction _ _ _ = die $
  ++ "--upgrade-dependencies, it is recommended that you do not upgrade core "
  ++ "packages (e.g. by using appropriate --constraint= flags)."
 
+upgradeAllAction :: Flag Verbosity -> [String] -> GlobalFlags -> IO ()
+upgradeAllAction flagVerbosity _ globalFlags = do
+  let verbosity = fromFlag flagVerbosity
+  savedConfig <- loadConfig verbosity (globalConfigFile globalFlags)
+  (comp, _, conf) <- configCompilerAux' (savedConfigureFlags savedConfig)
+  pkgs <- getPackagesInView verbosity comp conf "default"
+  print pkgs
+  -- let pkgs' = filter (/= sorcePackage) pkgs
+  -- pkgs'' <- map applyWorldRestrictions pkgs
+  -- installPkgs upgradeDeps pkgs''
+
 fetchAction :: FetchFlags -> [String] -> GlobalFlags -> IO ()
 fetchAction fetchFlags extraArgs globalFlags = do
   let verbosity = fromFlag (fetchVerbosity fetchFlags)
@@ -1038,11 +1051,9 @@ uninstallAction _verbosityFlag extraArgs _globalFlags = do
   let package = case extraArgs of
         p:_ -> p
         _   -> "PACKAGE_NAME"
-  die $ "This version of 'cabal-install' does not support the 'uninstall' operation. "
-        ++ "It will likely be implemented at some point in the future; in the meantime "
-        ++ "you're advised to use either 'ghc-pkg unregister " ++ package ++ "' or "
-        ++ "'cabal sandbox hc-pkg -- unregister " ++ package ++ "'."
-
+  print package
+  -- pkgid <- getExactIpid package
+  -- remove pkgid
 
 sdistAction :: (SDistFlags, SDistExFlags) -> [String] -> GlobalFlags -> IO ()
 sdistAction (sdistFlags, sdistExFlags) extraArgs globalFlags = do
