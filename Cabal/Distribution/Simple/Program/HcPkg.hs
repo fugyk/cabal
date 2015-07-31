@@ -354,7 +354,7 @@ listViews' hpi verbosity =
 
   where
     invocation = programInvocation (hcPkgProgram hpi) args
-    args = ["view", "list-views",
+    args = ["list-views",
            "--simple-output",
            packageDbOpts hpi UserPackageDB]
     parseipids = lines

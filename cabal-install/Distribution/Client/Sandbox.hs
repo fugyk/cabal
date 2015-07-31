@@ -119,12 +119,12 @@ import System.Directory                       ( createDirectory
                                               , getCurrentDirectory
                                               , removeDirectoryRecursive
                                               , removeFile
-                                              , renameDirectory )
+                                              , renameDirectory
+                                              , createDirectoryIfMissing)
 import System.FilePath                        ( (</>), (<.>), equalFilePath
                                               , getSearchPath
                                               , searchPathSeparator
                                               , takeDirectory )
-import System.Posix.Files                     ( createSymbolicLink )
 
 
 --
@@ -317,12 +317,14 @@ sandboxInit verbosity sandboxFlags globalFlags = do
     (compilerId comp) platform
   when (Register.viewSupported comp conf) $ do
     let viewFile = sandboxDir </> "views" </> sandboxDirHash sandboxDir <.> "view"
-        ghcEnvFile = ".ghc.environment"
+        -- ghcEnvFile = (takeDirectory sandboxDir) </> ".ghc.environment"
+    createDirectoryIfMissing False (takeDirectory viewFile)
     appendFile viewFile ""
     Register.createView verbosity comp conf (Right viewFile)
-    removeFile ghcEnvFile
-    -- TODO: Add windows equivalent
-    createSymbolicLink ghcEnvFile viewFile
+    -- envFileExists <- doesFileExist ghcEnvFile
+    -- unless envFileExists $
+      -- TODO: Add windows equivalent
+      -- createSymbolicLink ghcEnvFile viewFile
 
 
 -- | Entry point for the 'cabal sandbox delete' command.

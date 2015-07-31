@@ -905,7 +905,7 @@ gcCommand = CommandUI {
     commandDescription = Nothing,
     commandNotes = Nothing,
     commandUsage = \pname -> "Usage: " ++ pname ++ " collect-garbage\n",
-    commandDefaultFlags = toFlag deafening,
+    commandDefaultFlags = toFlag normal,
     commandOptions      = \_ -> []
   }
 runCommand :: CommandUI (BuildFlags, BuildExFlags)

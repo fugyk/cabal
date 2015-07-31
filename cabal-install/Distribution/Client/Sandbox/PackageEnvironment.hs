@@ -207,11 +207,12 @@ initialPackageEnvironment sandboxDir compiler platform conf = do
                     {- userInstall= -} False {- _hasLibs= -} False
   let initialConfig = commonPackageEnvironmentConfig sandboxDir
       installDirs   = if (Register.viewSupported compiler conf)
-                         -- Executables are best managed separately and be rebuilt everytime
-                         -- it is installed to keep it simple
-                         then mempty {bindir = Flag $ toPathTemplate (sandboxDir </> "bin")}
+                         then -- Executables are best managed separately and be rebuilt everytime
+                              -- it is installed to keep it simple
+                              mempty {bindir = toFlag $ toPathTemplate (sandboxDir </> "bin"),
+                                      prefix = toFlag $ toPathTemplate sandboxDir}
                          else combineInstallDirs (\d f -> Flag $ fromFlagOrDefault d f)
-                      defInstallDirs (savedUserInstallDirs initialConfig)
+                                defInstallDirs (savedUserInstallDirs initialConfig)
       confFlags = setPackageDB sandboxDir compiler platform
                              (savedConfigureFlags initialConfig) conf
   return $ mempty {
@@ -220,6 +221,9 @@ initialPackageEnvironment sandboxDir compiler platform conf = do
        savedGlobalInstallDirs = installDirs,
        savedGlobalFlags = (savedGlobalFlags initialConfig) {
           globalLocalRepos = toNubList [sandboxDir </> "packages"]
+          },
+       savedConfigureExFlags = mempty {
+          configView = toFlag $ sandboxDirHash sandboxDir
           },
        savedConfigureFlags = confFlags,
        savedInstallFlags = (savedInstallFlags initialConfig) {
@@ -247,7 +251,6 @@ setPackageDB sandboxDir compiler platform configFlags conf =
   if viewSupported
     then configFlags {
       configPackageDBs = [Just UserPackageDB]
-      --configView = Flag $ sandboxDirHash sandboxDir
     }
     else configFlags {
       configPackageDBs = [Just (SpecificPackageDB $ sandboxPackageDBPath
