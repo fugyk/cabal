@@ -33,7 +33,8 @@ module Distribution.Client.Setup
     , reportCommand, ReportFlags(..)
     , runCommand
     , initCommand, IT.InitFlags(..)
-    , sdistCommand, SDistFlags(..), SDistExFlags(..), ArchiveFormat(..)
+    , sdistCommand, defaultSDistExFlags, SDistFlags(..)
+    , SDistExFlags(..), ArchiveFormat(..)
     , win32SelfUpgradeCommand, Win32SelfUpgradeFlags(..)
     , actAsSetupCommand, ActAsSetupFlags(..)
     , sandboxCommand, defaultSandboxLocation, SandboxFlags(..)
@@ -1805,7 +1806,8 @@ initCommand = CommandUI {
 -- | Extra flags to @sdist@ beyond runghc Setup sdist
 --
 data SDistExFlags = SDistExFlags {
-    sDistFormat    :: Flag ArchiveFormat
+    sDistFormat      :: Flag ArchiveFormat,
+    sDistArchivePath :: Flag FilePath
   }
   deriving Show
 
@@ -1814,7 +1816,8 @@ data ArchiveFormat = TargzFormat | ZipFormat -- | ...
 
 defaultSDistExFlags :: SDistExFlags
 defaultSDistExFlags = SDistExFlags {
-    sDistFormat  = Flag TargzFormat
+    sDistFormat  = Flag TargzFormat,
+    sDistArchivePath = NoFlag
   }
 
 sdistCommand :: CommandUI (SDistFlags, SDistExFlags)
@@ -1837,14 +1840,20 @@ sdistCommand = Cabal.sdistCommand {
             , (Flag ZipFormat,   ([], ["zip"]),
                  "Produce a '.zip' format archive")
             ])
+      ,option [] ["archive-path"]
+         "Path for saving the archive"
+         sDistArchivePath (\v flags -> flags { sDistArchivePath = v })
+         (reqArgFlag "FILE")
       ]
 
 instance Monoid SDistExFlags where
   mempty = SDistExFlags {
-    sDistFormat  = mempty
+    sDistFormat  = mempty,
+    sDistArchivePath = mempty
   }
   mappend a b = SDistExFlags {
-    sDistFormat  = combine sDistFormat
+    sDistFormat  = combine sDistFormat,
+    sDistArchivePath = combine sDistArchivePath
   }
     where
       combine field = field a `mappend` field b

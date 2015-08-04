@@ -20,7 +20,7 @@ import Distribution.PackageDescription.Parse
          ( readPackageDescription )
 import Distribution.Simple.Utils
          ( createDirectoryIfMissingVerbose, defaultPackageDesc
-         , die, notice, withTempDirectory )
+         , die, notice, warn, withTempDirectory )
 import Distribution.Client.Setup
          ( SDistFlags(..), SDistExFlags(..), ArchiveFormat(..) )
 import Distribution.Simple.Setup
@@ -33,6 +33,7 @@ import Distribution.Verbosity (Verbosity)
 import Distribution.Version   (Version(..), orLaterVersion)
 
 import System.FilePath ((</>), (<.>))
+import System.Directory ( copyFile )
 import Control.Monad (when, unless)
 import System.Directory (doesFileExist, removeFile, canonicalizePath)
 import System.Process (runProcess, waitForProcess)
@@ -63,8 +64,8 @@ sdist flags exflags = do
 
     -- Unless we were given --list-sources or --output-directory ourselves,
     -- create an archive.
-    when needMakeArchive $
-      createArchive verbosity pkg tmpDir distPref
+    when needMakeArchive $ do
+      createArchive verbosity pkg tmpDir pkg
 
     when isOutDirectory $
       notice verbosity $ "Source directory created: " ++ tmpTargetDir
@@ -81,6 +82,8 @@ sdist flags exflags = do
     needMakeArchive = not (isListSources || isOutDirectory)
     verbosity       = fromFlag (sDistVerbosity flags)
     distPref        = fromFlag (sDistDistPref flags)
+    destPath pkg    = fromFlagOrDefault (destInside pkg distPref)
+                        (sDistArchivePath exflags)
     tmpTargetDir    = fromFlagOrDefault (srcPref distPref) (sDistDirectory flags)
     setupOpts       = defaultSetupScriptOptions {
       -- The '--output-directory' sdist flag was introduced in Cabal 1.12, and
@@ -90,9 +93,24 @@ sdist flags exflags = do
                         else orLaterVersion $ Version [1,12,0] []
       }
     format        = fromFlag (sDistFormat exflags)
-    createArchive = case format of
-      TargzFormat -> createTarGzArchive
-      ZipFormat   -> createZipArchive
+    createArchive = \a b c pkg -> do
+      case format of
+        TargzFormat -> createTarGzArchive a b c (destPath pkg)
+        ZipFormat   -> createZipArchive a b c distPref
+      case (sDistArchivePath exflags) of
+        NoFlag -> return ()
+        _ -> case (fromFlag (sDistFormat exflags)) of
+               -- FIXME
+               ZipFormat -> do warn verbosity ("Due to complex zip interface" ++
+                                 " --archive-path is not well supported with --zip.")
+                               copyFile (distPref </> (tarBallName pkg) <.> "zip")
+                                 (destPath pkg)
+               TargzFormat -> return ()
+
+
+    destInside pkg folder = folder </> tarBallName pkg <.> (case format of
+      TargzFormat -> "tar.gz"
+      ZipFormat   -> "zip")
 
 tarBallName :: PackageDescription -> String
 tarBallName = display . packageId
@@ -100,11 +118,9 @@ tarBallName = display . packageId
 -- | Create a tar.gz archive from a tree of source files.
 createTarGzArchive :: Verbosity -> PackageDescription -> FilePath -> FilePath
                     -> IO ()
-createTarGzArchive verbosity pkg tmpDir targetPref = do
-    createTarGzFile tarBallFilePath tmpDir (tarBallName pkg)
-    notice verbosity $ "Source tarball created: " ++ tarBallFilePath
-  where
-    tarBallFilePath = targetPref </> tarBallName pkg <.> "tar.gz"
+createTarGzArchive verbosity pkg tmpDir destPath = do
+    createTarGzFile destPath tmpDir (tarBallName pkg)
+    notice verbosity $ "Source tarball created: " ++ destPath
 
 -- | Create a zip archive from a tree of source files.
 createZipArchive :: Verbosity -> PackageDescription -> FilePath -> FilePath

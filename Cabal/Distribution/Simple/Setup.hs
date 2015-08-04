@@ -76,7 +76,7 @@ import qualified Text.PrettyPrint as Disp
 import Distribution.ModuleName
 import Distribution.Package ( Dependency(..)
                             , PackageName
-                            , InstalledPackageId )
+                            , InstalledPackageId(..) )
 import Distribution.PackageDescription
          ( FlagName(..), FlagAssignment )
 import Distribution.Simple.Command hiding (boolOpt, boolOpt')
@@ -1084,7 +1084,8 @@ data RegisterFlags = RegisterFlags {
     regInPlace     :: Flag Bool,
     regDistPref    :: Flag FilePath,
     regPrintId     :: Flag Bool,
-    regVerbosity   :: Flag Verbosity
+    regVerbosity   :: Flag Verbosity,
+    regIPID        :: Flag InstalledPackageId
   }
   deriving Show
 
@@ -1096,7 +1097,8 @@ defaultRegisterFlags = RegisterFlags {
     regInPlace     = Flag False,
     regDistPref    = NoFlag,
     regPrintId     = Flag False,
-    regVerbosity   = Flag normal
+    regVerbosity   = Flag normal,
+    regIPID        = NoFlag
   }
 
 registerCommand :: CommandUI RegisterFlags
@@ -1141,6 +1143,12 @@ registerCommand = CommandUI
          "print the installed package ID calculated for this package"
          regPrintId (\v flags -> flags { regPrintId = v })
          trueArg
+      ,option "" ["ipid"]
+         "Sets the exact ipid of the package when registering"
+         regIPID (\v flags -> flags { regIPID = v })
+         (reqArg' "IPID" (Flag . InstalledPackageId) (\flag -> case flag of
+                                                         (Flag (InstalledPackageId s)) -> [s]
+                                                         NoFlag -> []))
       ]
   }
 
@@ -1185,7 +1193,8 @@ instance Monoid RegisterFlags where
     regInPlace     = mempty,
     regPrintId     = mempty,
     regDistPref    = mempty,
-    regVerbosity   = mempty
+    regVerbosity   = mempty,
+    regIPID        = mempty
   }
   mappend a b = RegisterFlags {
     regPackageDB   = combine regPackageDB,
@@ -1194,7 +1203,8 @@ instance Monoid RegisterFlags where
     regInPlace     = combine regInPlace,
     regPrintId     = combine regPrintId,
     regDistPref    = combine regDistPref,
-    regVerbosity   = combine regVerbosity
+    regVerbosity   = combine regVerbosity,
+    regIPID        = combine regIPID
   }
     where combine field = field a `mappend` field b
 

@@ -39,6 +39,9 @@ import Data.Maybe
 import Control.Exception as Exception
          ( Exception(toException), bracket, catches
          , Handler(Handler), handleJust, IOException, SomeException )
+import Data.Hashable ( hash )
+import Numeric ( showHex )
+import qualified Data.ByteString as BS
 #ifndef mingw32_HOST_OS
 import Control.Exception as Exception
          ( Exception(fromException) )
@@ -82,7 +85,8 @@ import Distribution.Client.InstallPlan (InstallPlan)
 import Distribution.Client.Setup
          ( GlobalFlags(..)
          , ConfigFlags(..), configureCommand, filterConfigureFlags
-         , ConfigExFlags(..), InstallFlags(..) )
+         , ConfigExFlags(..), InstallFlags(..)
+         , SDistExFlags(..), defaultSDistExFlags )
 import Distribution.Client.Config
          ( defaultCabalDir, defaultUserInstall )
 import Distribution.Client.Sandbox.Timestamp
@@ -91,6 +95,7 @@ import Distribution.Client.Sandbox.Types
          ( SandboxPackageInfo(..), UseSandbox(..), isUseSandbox
          , whenUsingSandbox )
 import Distribution.Client.Tar (extractTarGzFile)
+import Distribution.Client.SrcDist ( sdist )
 import Distribution.Client.Types as Source
 import Distribution.Client.BuildReports.Types
          ( ReportLevel(..) )
@@ -121,7 +126,8 @@ import Distribution.Simple.PackageIndex (InstalledPackageIndex)
 import Distribution.Simple.Setup
          ( haddockCommand, HaddockFlags(..)
          , buildCommand, BuildFlags(..), emptyBuildFlags
-         , toFlag, fromFlag, fromFlagOrDefault, flagToMaybe, defaultDistPref )
+         , toFlag, fromFlag, fromFlagOrDefault, flagToMaybe, defaultDistPref
+         , defaultSDistFlags, SDistFlags(..) )
 import qualified Distribution.Simple.Setup as Cabal
          ( Flag(..)
          , copyCommand, CopyFlags(..), emptyCopyFlags
@@ -137,7 +143,7 @@ import Distribution.Package
          ( PackageIdentifier(..), PackageId, packageName, packageVersion
          , Package(..), LibraryName
          , Dependency(..), thisPackageVersion
-         , InstalledPackageId, installedPackageId
+         , InstalledPackageId(..), installedPackageId
          , HasInstalledPackageId(..) )
 import qualified Distribution.PackageDescription as PackageDescription
 import Distribution.PackageDescription
@@ -160,7 +166,7 @@ import Distribution.System
 import Distribution.Text
          ( display )
 import Distribution.Verbosity as Verbosity
-         ( Verbosity, showForCabal, normal, verbose )
+         ( Verbosity, showForCabal, normal, verbose, silent )
 import Distribution.Simple.BuildPaths ( exeExtension )
 
 --TODO:
@@ -1398,6 +1404,8 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
         configVerbosity = toFlag verbosity'
       }
 
+  ipid <- generateIPID
+
   -- Path to the optional log file.
   mLogPath <- maybeLogPath
 
@@ -1432,7 +1440,7 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
       -- Install phase
         onFailure InstallFailed $ criticalSection installLock $ do
           -- Capture installed package configuration file
-          maybePkgConf <- maybeGenPkgConf mLogPath
+          maybePkgConf <- maybeGenPkgConf mLogPath ipid
 
           -- Actual installation
           withWin32SelfUpgrade verbosity libname configFlags
@@ -1442,7 +1450,7 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
               Nothing    -> do
                 setup Cabal.copyCommand copyFlags mLogPath
                 when shouldRegister $ do
-                  setup Cabal.registerCommand registerFlags mLogPath
+                  setup Cabal.registerCommand (registerFlags ipid) mLogPath
           return (Right (BuildOk docsResult testsResult maybePkgConf))
 
   where
@@ -1468,12 +1476,26 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
       Cabal.copyVerbosity  = toFlag verbosity'
     }
     shouldRegister = PackageDescription.hasLibs pkg
-    registerFlags _ = Cabal.emptyRegisterFlags {
+    registerFlags ipid _ = Cabal.emptyRegisterFlags {
       Cabal.regDistPref   = configDistPref configFlags,
-      Cabal.regVerbosity  = toFlag verbosity'
+      Cabal.regVerbosity  = toFlag verbosity',
+      Cabal.regIPID       = toFlag ipid
     }
     verbosity' = maybe verbosity snd useLogFile
     tempTemplate name = name ++ "-" ++ display pkgid
+
+    generateIPID :: IO InstalledPackageId
+    generateIPID = do
+      tmp <- getTemporaryDirectory
+      withTempFile tmp "sdist" $ \filePath handle -> do
+        hClose handle
+        sdist defaultSDistFlags{ sDistDistPref = configDistPref configFlags,
+                                 -- sdist produces too much noise for install.
+                                 sDistVerbosity = toFlag silent}
+          defaultSDistExFlags{ sDistArchivePath = toFlag filePath }
+        contents <- BS.readFile filePath
+        return $ InstalledPackageId $ (display pkgid) ++ "-" ++
+          showHex ((fromIntegral $ hash contents)::Word) ""
 
     addDefaultInstallDirs :: ConfigFlags -> IO ConfigFlags
     addDefaultInstallDirs configFlags' = do
@@ -1491,13 +1513,14 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
                         (configUserInstall configFlags')
 
     maybeGenPkgConf :: Maybe FilePath
+                    -> InstalledPackageId
                     -> IO (Maybe Installed.InstalledPackageInfo)
-    maybeGenPkgConf mLogPath =
+    maybeGenPkgConf mLogPath ipid =
       if shouldRegister then do
         tmp <- getTemporaryDirectory
         withTempFile tmp (tempTemplate "pkgConf") $ \pkgConfFile handle -> do
           hClose handle
-          let registerFlags' version = (registerFlags version) {
+          let registerFlags' version = (registerFlags ipid version) {
                 Cabal.regGenPkgConf = toFlag (Just pkgConfFile)
               }
           setup Cabal.registerCommand registerFlags' mLogPath
