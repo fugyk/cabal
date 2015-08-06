@@ -33,6 +33,7 @@ import Data.Foldable
          ( traverse_ )
 import Data.List
          ( isPrefixOf, unfoldr, nub, sort, (\\) )
+import Data.Word ( Word )
 import qualified Data.Set as S
 import Data.Maybe
          ( catMaybes, isJust, isNothing, fromMaybe, mapMaybe )
