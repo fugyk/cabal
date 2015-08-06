@@ -165,37 +165,37 @@ generateRegistrationInfo :: Verbosity
                          -> IO InstalledPackageInfo
 generateRegistrationInfo verbosity pkg lib lbi clbi inplace reloc distPref
   packageDb flagIPID = do
-    --TODO: eliminate pwd!
-    pwd <- getCurrentDirectory
+  --TODO: eliminate pwd!
+  pwd <- getCurrentDirectory
 
-    --TODO: the method of setting the InstalledPackageId is compiler specific
-    --      this aspect should be delegated to a per-compiler helper.
-    let comp = compiler lbi
-    ipid <-
-      case flagIPID of
-        Flag exactIPID -> return exactIPID
-        NoFlag -> case compilerFlavor comp of
-           GHC | compilerVersion comp >= Version [6,11] [] -> do
-                  s <- GHC.libAbiHash verbosity pkg lbi lib clbi
-                  return (InstalledPackageId (display (packageId pkg) ++ '-':s))
-           GHCJS -> do
-                  s <- GHCJS.libAbiHash verbosity pkg lbi lib clbi
-                  return (InstalledPackageId (display (packageId pkg) ++ '-':s))
-           _other -> do
-                  return (InstalledPackageId (display (packageId pkg)))
+  --TODO: the method of setting the InstalledPackageId is compiler specific
+  --      this aspect should be delegated to a per-compiler helper.
+  let comp = compiler lbi
+  ipid <-
+    case flagIPID of
+      Flag exactIPID -> return exactIPID
+      NoFlag -> case compilerFlavor comp of
+         GHC | compilerVersion comp >= Version [6,11] [] -> do
+                s <- GHC.libAbiHash verbosity pkg lbi lib clbi
+                return (InstalledPackageId (display (packageId pkg) ++ '-':s))
+         GHCJS -> do
+                s <- GHCJS.libAbiHash verbosity pkg lbi lib clbi
+                return (InstalledPackageId (display (packageId pkg) ++ '-':s))
+         _other -> do
+                return (InstalledPackageId (display (packageId pkg)))
 
-    installedPkgInfo <-
-      if inplace
-        then return (inplaceInstalledPackageInfo pwd distPref
-                       pkg ipid lib lbi clbi)
-      else if reloc
-        then relocRegistrationInfo verbosity
-                       pkg lib lbi clbi ipid packageDb
-        else return (absoluteInstalledPackageInfo
-                       pkg ipid lib lbi clbi)
+  installedPkgInfo <-
+    if inplace
+      then return (inplaceInstalledPackageInfo pwd distPref
+                     pkg ipid lib lbi clbi)
+    else if reloc
+      then relocRegistrationInfo verbosity
+                     pkg lib lbi clbi ipid packageDb
+      else return (absoluteInstalledPackageInfo
+                     pkg ipid lib lbi clbi)
 
 
-    return installedPkgInfo{ IPI.installedPackageId = ipid }
+  return installedPkgInfo{ IPI.installedPackageId = ipid }
 
 relocRegistrationInfo :: Verbosity
                       -> PackageDescription

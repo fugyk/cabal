@@ -201,6 +201,7 @@ Test-Suite unit-tests
         filepath,
         stm,
         time,
+        hashable,
         HTTP,
         zlib,
         random,
