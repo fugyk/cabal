@@ -248,6 +248,7 @@ test-suite package-tests
     directory,
     extensible-exceptions,
     filepath,
+    hashable,
     process,
     regex-posix,
     tasty,
