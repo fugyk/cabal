@@ -1405,12 +1405,11 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
   -- Path to the optional log file.
   mLogPath <- maybeLogPath
 
-  ipid <- generateIPID mLogPath
-
   -- Configure phase
   onFailure ConfigureFailed $ withJobLimit buildLimit $ do
     when (numJobs > 1) $ notice verbosity $
       "Configuring " ++ display pkgid ++ "..."
+    ipid <- generateIPID mLogPath
     setup configureCommand configureFlags mLogPath
 
   -- Build phase
@@ -1492,10 +1491,10 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
         -- will be deleted
         files <- fmap (lines . C.unpack) (BS.readFile filePath)
         contents <- mapM readFile (sort files)
-        -- show is found faster than intercalate and then replacement of
-        -- special character used in intercalating. We have not simply
-        -- hashed doubly concated list, as it just flatten out the nested
-        -- lists, so two sources can produce same hash
+        -- show is faster than intercalate and then replacement of special
+        -- character used in intercalating. We cannot simply hash by doubly
+        -- concating list, as it just flatten out the nested list, so different
+        -- sources can produce same hash
         return $ InstalledPackageId $ (display pkgid) ++ "-" ++
           (C.unpack $ hashStringToBase62 27 (C.pack (show contents)))
       where
