@@ -39,9 +39,9 @@ import Data.Maybe
 import Control.Exception as Exception
          ( Exception(toException), bracket, catches
          , Handler(Handler), handleJust, IOException, SomeException )
-import Data.Hashable ( hash )
-import Numeric ( showHex )
+import Data.Locator ( hashStringToBase62 )
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as C
 #ifndef mingw32_HOST_OS
 import Control.Exception as Exception
          ( Exception(fromException) )
@@ -86,8 +86,7 @@ import Distribution.Client.InstallPlan (InstallPlan)
 import Distribution.Client.Setup
          ( GlobalFlags(..)
          , ConfigFlags(..), configureCommand, filterConfigureFlags
-         , ConfigExFlags(..), InstallFlags(..)
-         , SDistExFlags(..), defaultSDistExFlags )
+         , ConfigExFlags(..), InstallFlags(..) )
 import Distribution.Client.Config
          ( defaultCabalDir, defaultUserInstall )
 import Distribution.Client.Sandbox.Timestamp
@@ -96,7 +95,6 @@ import Distribution.Client.Sandbox.Types
          ( SandboxPackageInfo(..), UseSandbox(..), isUseSandbox
          , whenUsingSandbox )
 import Distribution.Client.Tar (extractTarGzFile)
-import Distribution.Client.SrcDist ( sdist )
 import Distribution.Client.Types as Source
 import Distribution.Client.BuildReports.Types
          ( ReportLevel(..) )
@@ -133,7 +131,7 @@ import qualified Distribution.Simple.Setup as Cabal
          ( Flag(..)
          , copyCommand, CopyFlags(..), emptyCopyFlags
          , registerCommand, RegisterFlags(..), emptyRegisterFlags
-         , testCommand, TestFlags(..), emptyTestFlags )
+         , testCommand, TestFlags(..), emptyTestFlags, sdistCommand )
 import Distribution.Simple.Utils
          ( createDirectoryIfMissingVerbose, rawSystemExit, comparing
          , writeFileAtomic, withTempFile , withUTF8FileContents )
@@ -1405,10 +1403,10 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
         configVerbosity = toFlag verbosity'
       }
 
-  ipid <- generateIPID
-
   -- Path to the optional log file.
   mLogPath <- maybeLogPath
+
+  ipid <- generateIPID mLogPath
 
   -- Configure phase
   onFailure ConfigureFailed $ withJobLimit buildLimit $ do
@@ -1485,18 +1483,30 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
     verbosity' = maybe verbosity snd useLogFile
     tempTemplate name = name ++ "-" ++ display pkgid
 
-    generateIPID :: IO InstalledPackageId
-    generateIPID = do
+    generateIPID :: Maybe FilePath -> IO InstalledPackageId
+    generateIPID mLogPath = do
       tmp <- getTemporaryDirectory
       withTempFile tmp "sdist" $ \filePath handle -> do
         hClose handle
-        sdist defaultSDistFlags{ sDistDistPref = configDistPref configFlags,
-                                 -- sdist produces too much noise for install.
-                                 sDistVerbosity = toFlag silent}
-          defaultSDistExFlags{ sDistArchivePath = toFlag filePath }
-        contents <- BS.readFile filePath
+        setup Cabal.sdistCommand (sdistFlags filePath) mLogPath
+        -- Strictly open file as this is a temporary file and
+        -- will be deleted
+        files <- fmap (lines . C.unpack) (BS.readFile filePath)
+        contents <- mapM readFile (sort files)
+        -- show is found faster than intercalate and then replacement of
+        -- special character used in intercalating. We have not simply
+        -- hashed doubly concated list, as it just flatten out the nested
+        -- lists, so two sources can produce same hash
         return $ InstalledPackageId $ (display pkgid) ++ "-" ++
-          showHex ((fromIntegral $ hash contents)::Word) ""
+          (C.unpack $ hashStringToBase62 27 (C.pack (show contents)))
+      where
+        sdistFlags filePath _ =
+          defaultSDistFlags {
+            sDistDistPref = configDistPref configFlags,
+            sDistListSources = toFlag filePath,
+            -- sdist produces too much noise for install.
+            sDistVerbosity = toFlag silent
+          }
 
     addDefaultInstallDirs :: ConfigFlags -> IO ConfigFlags
     addDefaultInstallDirs configFlags' = do
