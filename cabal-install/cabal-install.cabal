@@ -194,6 +194,7 @@ Test-Suite unit-tests
         bytestring,
         Cabal,
         containers,
+        locators,
         mtl,
         pretty,
         process,
