@@ -55,7 +55,6 @@ import Control.Applicative
          ( (<$>) )
 import Data.Traversable
          ( traverse )
-import Data.Word ( Word )
 #endif
 import Control.Monad
          ( filterM, forM_, when, unless )
