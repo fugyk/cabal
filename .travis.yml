@@ -62,7 +62,7 @@ script:
  - cabal configure --enable-tests --ghc-option=-Werror
  - cabal build
  - cabal test
- - cabal check
+ - cabal check -v2
  - cabal sdist
  - install_from_tarball
 
