@@ -164,7 +164,7 @@ import Distribution.System
 import Distribution.Text
          ( display )
 import Distribution.Verbosity as Verbosity
-         ( Verbosity, showForCabal, normal, verbose, silent )
+         ( Verbosity, showForCabal, normal, verbose )
 import Distribution.Simple.BuildPaths ( exeExtension )
 
 --TODO:
