@@ -1503,7 +1503,7 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
             sDistDistPref = configDistPref configFlags,
             sDistListSources = toFlag filePath,
             -- sdist produces too much noise for install.
-            sDistVerbosity = toFlag silent
+            sDistVerbosity = toFlag verbose
           }
 
     addDefaultInstallDirs :: ConfigFlags -> IO ConfigFlags
