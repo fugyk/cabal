@@ -1382,6 +1382,7 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
                        configFlags installFlags haddockFlags
                        cinfo platform pkg pkgoverride workingDir useLogFile = do
 
+  print "Loc1"
   -- Override the .cabal file if necessary
   case pkgoverride of
     Nothing     -> return ()
@@ -1392,6 +1393,7 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
         "Updating " ++ display (packageName pkgid) <.> "cabal"
                     ++ " with the latest revision from the index."
       writeFileAtomic descFilePath pkgtxt
+  print "Loc2"
 
   -- Make sure that we pass --libsubdir etc to 'setup configure' (necessary if
   -- the setup script was compiled against an old version of the Cabal lib).
@@ -1409,8 +1411,12 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
   onFailure ConfigureFailed $ withJobLimit buildLimit $ do
     when (numJobs > 1) $ notice verbosity $
       "Configuring " ++ display pkgid ++ "..."
+    print "Loc3"
     ipid <- generateIPID mLogPath
+    print "Loc9"
+
     setup configureCommand configureFlags mLogPath
+    print "Loc10"
 
   -- Build phase
     onFailure BuildFailed $ do
@@ -1483,10 +1489,13 @@ installUnpackedPackage verbosity buildLimit installLock numJobs libname
 
     generateIPID :: Maybe FilePath -> IO InstalledPackageId
     generateIPID mLogPath = do
+      print "Loc5"
       tmp <- getTemporaryDirectory
       withTempFile tmp "sdist" $ \filePath handle -> do
         hClose handle
+        print "Loc6"
         setup Cabal.sdistCommand (sdistFlags filePath) mLogPath
+        print "Loc7"
         -- Strictly open file as this is a temporary file and
         -- will be deleted
         files <- fmap (lines . C.unpack) (BS.readFile filePath)
