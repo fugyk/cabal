@@ -39,6 +39,7 @@ module Distribution.Simple.Register (
     viewSupported,
     createView,
     addPackageToView,
+    removePackageFromView,
     getPackagesInView,
     listViews
 
@@ -73,7 +74,7 @@ import Distribution.PackageDescription
          ( PackageDescription(..), Library(..), BuildInfo(..), libModules )
 import Distribution.Package
          ( Package(..), packageName, InstalledPackageId(..)
-         , getHSLibraryName )
+         , getHSLibraryName, PackageId )
 import Distribution.InstalledPackageInfo
          ( InstalledPackageInfo, InstalledPackageInfo_(InstalledPackageInfo)
          , showInstalledPackageInfo )
@@ -281,6 +282,13 @@ addPackageToView :: Verbosity -> Compiler -> ProgramConfiguration
 addPackageToView verbosity comp conf view_name ipid =
   withHcPkg "addPackageToView" comp conf
     (\hpi -> HcPkg.addPackageToView' hpi verbosity view_name ipid)
+
+removePackageFromView :: Verbosity -> Compiler -> ProgramConfiguration
+                      -> String -> PackageId
+                      -> IO ()
+removePackageFromView verbosity comp conf view_name pkg =
+  withHcPkg "removePackageFromView" comp conf
+    (\hpi -> HcPkg.removePackageFromView' hpi verbosity view_name $ display pkg)
 
 getPackagesInView :: Verbosity -> Compiler -> ProgramConfiguration
                   -> String -> IO [InstalledPackageId]

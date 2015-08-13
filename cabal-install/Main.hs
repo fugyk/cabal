@@ -23,7 +23,7 @@ import Distribution.Client.Setup
          , buildCommand, replCommand, testCommand, benchmarkCommand
          , InstallFlags(..), defaultInstallFlags
          , installCommand, upgradeCommand, uninstallCommand
-         , gcCommand
+         , gcCommand, upgradeAllCommand
          , FetchFlags(..), fetchCommand
          , FreezeFlags(..), freezeCommand
          , GetFlags(..), getCommand, unpackCommand
@@ -134,7 +134,7 @@ import Distribution.Simple.Command
 import Distribution.Simple.Compiler
          ( Compiler(..) )
 import Distribution.Simple.Register
-         ( getPackagesInView )
+         ( getPackagesInView, removePackageFromView )
 import Distribution.Simple.Configure
          ( checkPersistBuildConfigOutdated, configCompilerAuxEx
          , ConfigStateFileError(..), localBuildInfoFile
@@ -264,7 +264,8 @@ mainWorker args = topHandler $
                      regVerbosity      regDistPref
       ,testCommand            `commandAddAction` testAction
       ,benchmarkCommand       `commandAddAction` benchmarkAction
-      ,gcCommand              `commandAddAction`    gcAction
+      ,upgradeAllCommand      `commandAddAction` upgradeAllAction
+      ,gcCommand              `commandAddAction` gcAction
       ,hiddenCommand $
        uninstallCommand       `commandAddAction` uninstallAction
       ,hiddenCommand $
@@ -946,15 +947,18 @@ upgradeAction _ _ _ = die $
  ++ "packages (e.g. by using appropriate --constraint= flags)."
 
 upgradeAllAction :: Flag Verbosity -> [String] -> GlobalFlags -> IO ()
-upgradeAllAction flagVerbosity _ globalFlags = do
-  let verbosity = fromFlag flagVerbosity
+upgradeAllAction verbosityFlag _ globalFlags = do
+  let verbosity = fromFlag verbosityFlag
   savedConfig <- loadConfig verbosity (globalConfigFile globalFlags)
   (comp, _, conf) <- configCompilerAux' (savedConfigureFlags savedConfig)
   pkgs <- getPackagesInView verbosity comp conf "default"
   print pkgs
   -- let pkgs' = filter (/= sorcePackage) pkgs
   -- pkgs'' <- map applyWorldRestrictions pkgs
-  -- installPkgs upgradeDeps pkgs''
+  installAction (Cabal.defaultConfigFlags conf,
+                 defaultConfigExFlags,
+                 defaultInstallFlags { installUpgradeDeps = toFlag True },
+                 defaultHaddockFlags) pkgs globalFlags
 
 fetchAction :: FetchFlags -> [String] -> GlobalFlags -> IO ()
 fetchAction fetchFlags extraArgs globalFlags = do
@@ -1047,13 +1051,19 @@ formatAction verbosityFlag extraArgs _globalFlags = do
   writeGenericPackageDescription path pkgDesc
 
 uninstallAction :: Flag Verbosity -> [String] -> GlobalFlags -> IO ()
-uninstallAction _verbosityFlag extraArgs _globalFlags = do
+uninstallAction verbosityFlag extraArgs globalFlags = do
+  let verbosity = fromFlag verbosityFlag
+  savedConfig <- loadConfig verbosity (globalConfigFile globalFlags)
+  (comp, _, conf) <- configCompilerAux' (savedConfigureFlags savedConfig)
   let package = case extraArgs of
         p:_ -> p
         _   -> "PACKAGE_NAME"
   print package
   -- pkgid <- getExactIpid package
-  -- remove pkgid
+  -- package' = ipidToArg pkgid
+  removePackageFromView verbosity comp conf "default" $ display package
+  -- where ipidToArg = init . reverse . snd . (span (/= '-')) . reverse . display
+
 
 sdistAction :: (SDistFlags, SDistExFlags) -> [String] -> GlobalFlags -> IO ()
 sdistAction (sdistFlags, sdistExFlags) extraArgs globalFlags = do

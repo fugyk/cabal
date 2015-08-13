@@ -22,6 +22,7 @@ module Distribution.Client.Setup
     , listCommand, ListFlags(..)
     , updateCommand
     , upgradeCommand
+    , upgradeAllCommand
     , uninstallCommand
     , gcCommand
     , infoCommand, InfoFlags(..)
@@ -90,7 +91,7 @@ import Distribution.ReadE
 import qualified Distribution.Compat.ReadP as Parse
          ( ReadP, readP_to_S, readS_to_P, char, munch1, pfail, sepBy1, (+++) )
 import Distribution.Verbosity
-         ( Verbosity, normal, deafening )
+         ( Verbosity, normal )
 import Distribution.Simple.Utils
          ( wrapText, wrapLine )
 
@@ -835,12 +836,15 @@ upgradeCommand = configureCommand {
 
 upgradeAllCommand  :: CommandUI (Flag Verbosity)
 upgradeAllCommand = configureCommand {
-    commandName         = "upgrade",
-    commandSynopsis     = "Upgrades installed packages",
+    commandName         = "upgrade-all",
+    commandSynopsis     = wrapText $
+      "Upgrade installed packages and its dependencies",
     commandDescription  = Just $ \_ -> wrapText $
       "Upgrades the packages installed from repo. It does not upgrades " ++
       "packages installed from source. If there is a constraint on package " ++
-      "while installing, then the constraint will be respected while upgrading",
+      "while installing, then the constraint will be respected while " ++
+      "upgrading. Use `cabal collect-garbage` to free older version if it " ++
+      "is unreachable.",
     commandUsage        = usageFlagsOrPackages "upgrade",
     commandDefaultFlags = toFlag normal,
     commandOptions      = \_ -> [optionVerbosity id const]
