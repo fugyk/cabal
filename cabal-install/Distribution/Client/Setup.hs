@@ -22,7 +22,9 @@ module Distribution.Client.Setup
     , listCommand, ListFlags(..)
     , updateCommand
     , upgradeCommand
+    , upgradeAllCommand
     , uninstallCommand
+    , gcCommand
     , infoCommand, InfoFlags(..)
     , fetchCommand, FetchFlags(..)
     , freezeCommand, FreezeFlags(..)
@@ -456,12 +458,14 @@ data ConfigExFlags = ConfigExFlags {
     configExConstraints:: [(UserConstraint, ConstraintSource)],
     configPreferences  :: [Dependency],
     configSolver       :: Flag PreSolver,
-    configAllowNewer   :: Flag AllowNewer
+    configAllowNewer   :: Flag AllowNewer,
+    configPkgenv         :: Flag String    -- ^Which package environment to use
   }
 
 defaultConfigExFlags :: ConfigExFlags
 defaultConfigExFlags = mempty { configSolver     = Flag defaultSolver
-                              , configAllowNewer = Flag AllowNewerNone }
+                              , configAllowNewer = Flag AllowNewerNone
+                              , configPkgenv     = Flag "default"}
 
 configureExCommand :: CommandUI (ConfigFlags, ConfigExFlags)
 configureExCommand = configureCommand {
@@ -511,6 +515,10 @@ configureExOptions _showOrParseArgs src =
     (optArg allowNewerArgument
      (fmap Flag allowNewerParser) (Flag AllowNewerAll)
      allowNewerPrinter)
+  , option "" ["pkgenv"]
+      "Use the given pkgenv"
+      configPkgenv (\v flags -> flags { configPkgenv = v })
+      (reqArgFlag "pkgenv")
 
   ]
   where allowNewerArgument = "DEPS"
@@ -521,14 +529,16 @@ instance Monoid ConfigExFlags where
     configExConstraints= mempty,
     configPreferences  = mempty,
     configSolver       = mempty,
-    configAllowNewer   = mempty
+    configAllowNewer   = mempty,
+    configPkgenv         = mempty
   }
   mappend a b = ConfigExFlags {
     configCabalVersion = combine configCabalVersion,
     configExConstraints= combine configExConstraints,
     configPreferences  = combine configPreferences,
     configSolver       = combine configSolver,
-    configAllowNewer   = combine configAllowNewer
+    configAllowNewer   = combine configAllowNewer,
+    configPkgenv         = combine configPkgenv
   }
     where combine field = field a `mappend` field b
 
@@ -828,6 +838,22 @@ upgradeCommand = configureCommand {
     commandOptions      = commandOptions installCommand
   }
 
+upgradeAllCommand  :: CommandUI (Flag Verbosity)
+upgradeAllCommand = configureCommand {
+    commandName         = "upgrade-all",
+    commandSynopsis     = wrapText $
+      "Upgrade installed packages and its dependencies",
+    commandDescription  = Just $ \_ -> wrapText $
+      "Upgrades the packages installed from repo. It does not upgrades " ++
+      "packages installed from source. If there is a constraint on package " ++
+      "while installing, then the constraint will be respected while " ++
+      "upgrading. Use `cabal collect-garbage` to free older version if it " ++
+      "is unreachable.",
+    commandUsage        = usageFlagsOrPackages "upgrade",
+    commandDefaultFlags = toFlag normal,
+    commandOptions      = \_ -> [optionVerbosity id const]
+  }
+
 {-
 cleanCommand  :: CommandUI ()
 cleanCommand = makeCommand name shortDesc longDesc emptyFlags options
@@ -869,14 +895,27 @@ formatCommand = CommandUI {
 uninstallCommand  :: CommandUI (Flag Verbosity)
 uninstallCommand = CommandUI {
     commandName         = "uninstall",
-    commandSynopsis     = "Warn about 'uninstall' not being implemented.",
-    commandDescription  = Nothing,
+    commandSynopsis     = "Uninstalls the packages.",
+    commandDescription  = Just $ \_ -> wrapText $
+                            "This command uninstalls the paxckages, but does" ++
+                            "not free disk space. To free disk space after " ++
+                            "uninstalling, use `cabal garbage-collect`",
     commandNotes        = Nothing,
     commandUsage        = usageAlternatives "uninstall" ["PACKAGES"],
     commandDefaultFlags = toFlag normal,
     commandOptions      = \_ -> []
   }
 
+gcCommand :: CommandUI (Flag Verbosity)
+gcCommand = CommandUI {
+    commandName = "collect-garbage",
+    commandSynopsis = "Free unreachable packages by deleting files and unregistering",
+    commandDescription = Nothing,
+    commandNotes = Nothing,
+    commandUsage = \pname -> "Usage: " ++ pname ++ " collect-garbage\n",
+    commandDefaultFlags = toFlag normal,
+    commandOptions      = \_ -> []
+  }
 runCommand :: CommandUI (BuildFlags, BuildExFlags)
 runCommand = CommandUI {
     commandName         = "run",

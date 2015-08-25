@@ -34,6 +34,15 @@ module Distribution.Simple.Register (
     inplaceInstalledPackageInfo,
     absoluteInstalledPackageInfo,
     generalInstalledPackageInfo,
+
+    multInstEnabled,
+    pkgenvSupported,
+    createPkgenv,
+    addPackageToPkgenv,
+    removePackageFromPkgenv,
+    getPackagesInPkgenv,
+    listPkgenvs
+
   ) where
 
 import Distribution.Simple.LocalBuildInfo
@@ -60,12 +69,13 @@ import           Distribution.Simple.Program.HcPkg (HcPkgInfo)
 import qualified Distribution.Simple.Program.HcPkg as HcPkg
 import Distribution.Simple.Setup
          ( RegisterFlags(..), CopyDest(..)
-         , fromFlag, fromFlagOrDefault, flagToMaybe )
+         , fromFlag, fromFlagOrDefault, flagToMaybe , Flag(..) )
 import Distribution.PackageDescription
-         ( PackageDescription(..), Library(..), BuildInfo(..), libModules )
+         ( PackageDescription(..), Library(..), BuildInfo(..)
+         , libModules, Executable(exeName) )
 import Distribution.Package
          ( Package(..), packageName, InstalledPackageId(..)
-         , getHSLibraryName )
+         , getHSLibraryName, PackageId )
 import Distribution.InstalledPackageInfo
          ( InstalledPackageInfo, InstalledPackageInfo(InstalledPackageInfo)
          , showInstalledPackageInfo )
@@ -98,26 +108,42 @@ import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 register :: PackageDescription -> LocalBuildInfo
          -> RegisterFlags -- ^Install in the user's database?; verbose
          -> IO ()
-register pkg@PackageDescription { library       = Just lib  } lbi regFlags
+register pkg lbi regFlags
   = do
     let clbi = getComponentLocalBuildInfo lbi CLibName
 
-    absPackageDBs    <- absolutePackageDBPaths packageDbs
-    installedPkgInfo <- generateRegistrationInfo
-                           verbosity pkg lib lbi clbi inplace reloc distPref
-                           (registrationPackageDB absPackageDBs)
+    absPackageDBs     <- absolutePackageDBPaths packageDbs
+    installedPkgInfos <- generateRegistrationInfo
+                            verbosity pkg lbi clbi inplace reloc distPref
+                            (registrationPackageDB absPackageDBs)
 
-    when (fromFlag (regPrintId regFlags)) $ do
-      putStrLn (display (IPI.installedPackageId installedPkgInfo))
+    when (fromFlag (regPrintId regFlags)) $
+      mapM_
+        (\ipi -> putStrLn (display (IPI.installedPackageId ipi)))
+        installedPkgInfos
+
+    let installedPkgInfos'
+          = map (\ipi -> (if (fromFlagOrDefault False $ regHidden regFlags)
+                            then ipi {IPI.exposed = False}
+                            else ipi))
+              installedPkgInfos
 
      -- Three different modes:
     case () of
-     _ | modeGenerateRegFile   -> writeRegistrationFile installedPkgInfo
-       | modeGenerateRegScript -> writeRegisterScript   installedPkgInfo
-       | otherwise             -> registerPackage verbosity
-                                    installedPkgInfo pkg lbi inplace packageDbs
+     _ | modeGenerateRegFile   -> mapM_ writeRegistrationFile installedPkgInfos'
+       | modeGenerateRegScript -> mapM_ writeRegisterScript   installedPkgInfos'
+       | otherwise             -> mapM_ registerNow installedPkgInfos'
 
   where
+    registerNow installedPkgInfo = do
+      registerPackage verbosity installedPkgInfo pkg lbi inplace packageDbs
+      when (not inplace) $
+        case regPkgenv regFlags of
+          Flag pkgenv -> addPackageToPkgenv verbosity (compiler lbi)
+                         (withPrograms lbi) pkgenv
+                         (IPI.installedPackageId installedPkgInfo)
+          _ -> return ()
+
     modeGenerateRegFile = isJust (flagToMaybe (regGenPkgConf regFlags))
     regFile             = fromMaybe (display (packageId pkg) <.> "conf")
                                     (fromFlag (regGenPkgConf regFlags))
@@ -147,51 +173,51 @@ register pkg@PackageDescription { library       = Just lib  } lbi regFlags
                (compiler lbi) (withPrograms lbi)
                (writeHcPkgRegisterScript verbosity installedPkgInfo packageDbs)
 
-register _ _ regFlags = notice verbosity "No package to register"
-  where
-    verbosity = fromFlag (regVerbosity regFlags)
-
-
 generateRegistrationInfo :: Verbosity
                          -> PackageDescription
-                         -> Library
                          -> LocalBuildInfo
                          -> ComponentLocalBuildInfo
                          -> Bool
                          -> Bool
                          -> FilePath
                          -> PackageDB
-                         -> IO InstalledPackageInfo
-generateRegistrationInfo verbosity pkg lib lbi clbi inplace reloc distPref packageDb = do
+                         -> IO [InstalledPackageInfo]
+generateRegistrationInfo verbosity pkg lbi clbi inplace reloc distPref packageDb = do
   --TODO: eliminate pwd!
   pwd <- getCurrentDirectory
-
   --TODO: the method of setting the InstalledPackageId is compiler specific
   --      this aspect should be delegated to a per-compiler helper.
   let comp = compiler lbi
-  ipid <-
-    case compilerFlavor comp of
-     GHC | compilerVersion comp >= Version [6,11] [] -> do
-            s <- GHC.libAbiHash verbosity pkg lbi lib clbi
-            return (InstalledPackageId (display (packageId pkg) ++ '-':s))
-     GHCJS -> do
-            s <- GHCJS.libAbiHash verbosity pkg lbi lib clbi
-            return (InstalledPackageId (display (packageId pkg) ++ '-':s))
-     _other -> do
-            return (InstalledPackageId (display (packageId pkg)))
+  ipiLib <-
+    case (library pkg) of
+      Just lib -> do
+        ipid <-
+          case compilerFlavor comp of
+           GHC | compilerVersion comp >= Version [6,11] [] -> do
+                  s <- GHC.libAbiHash verbosity pkg lbi lib clbi
+                  return (InstalledPackageId (display (packageId pkg) ++ '-':s))
+           GHCJS -> do
+                  s <- GHCJS.libAbiHash verbosity pkg lbi lib clbi
+                  return (InstalledPackageId (display (packageId pkg) ++ '-':s))
+           _other -> do
+                  return (InstalledPackageId (display (packageId pkg)))
 
-  installedPkgInfo <-
-    if inplace
-      then return (inplaceInstalledPackageInfo pwd distPref
-                     pkg ipid lib lbi clbi)
-    else if reloc
-      then relocRegistrationInfo verbosity
-                     pkg lib lbi clbi ipid packageDb
-      else return (absoluteInstalledPackageInfo
-                     pkg ipid lib lbi clbi)
+        installedPkgInfo <-
+          if inplace
+            then return (inplaceInstalledPackageInfo pwd distPref
+                           pkg ipid lib lbi clbi)
+          else if reloc
+            then relocRegistrationInfo verbosity
+                           pkg lib lbi clbi ipid packageDb
+            else return (absoluteInstalledPackageInfo
+                           pkg ipid lib lbi clbi)
 
 
-  return installedPkgInfo{ IPI.installedPackageId = ipid }
+        return [installedPkgInfo{ IPI.installedPackageId = ipid }]
+      Nothing -> return []
+  let ipiExe = map (\exe -> exeInstalledPackageInfo pkg exe clbi)
+                 (executables pkg)
+  return $ ipiLib ++ ipiExe
 
 relocRegistrationInfo :: Verbosity
                       -> PackageDescription
@@ -230,12 +256,58 @@ invokeHcPkg verbosity comp conf dbStack extraArgs =
 withHcPkg :: String -> Compiler -> ProgramConfiguration
           -> (HcPkgInfo -> IO a) -> IO a
 withHcPkg name comp conf f =
-  case compilerFlavor comp of
-    GHC   -> f (GHC.hcPkgInfo conf)
-    GHCJS -> f (GHCJS.hcPkgInfo conf)
-    LHC   -> f (LHC.hcPkgInfo conf)
+  case getHcPkgInfo comp conf of
+    Just hcPkgInfo -> f hcPkgInfo
     _     -> die ("Distribution.Simple.Register." ++ name ++ ":\
                   \not implemented for this compiler")
+
+getHcPkgInfo :: Compiler -> ProgramConfiguration -> Maybe HcPkgInfo
+getHcPkgInfo comp conf = case compilerFlavor comp of
+                           GHC   -> Just (GHC.hcPkgInfo conf)
+                           GHCJS -> Just (GHCJS.hcPkgInfo conf)
+                           LHC   -> Just (LHC.hcPkgInfo conf)
+                           _     -> Nothing
+
+multInstEnabled :: Compiler -> ProgramConfiguration -> Bool
+multInstEnabled comp conf = case getHcPkgInfo comp conf of
+                            Just hpi -> HcPkg.supportsMultInst hpi
+                            _ -> False
+
+pkgenvSupported :: Compiler -> ProgramConfiguration -> Bool
+pkgenvSupported comp conf = case getHcPkgInfo comp conf of
+                            Just hpi -> HcPkg.supportsPkgenv hpi
+                            _ -> False
+
+createPkgenv :: Verbosity -> Compiler -> ProgramConfiguration
+           -> Either String FilePath -> IO ()
+createPkgenv verbosity comp conf pkgenv =
+  withHcPkg "createPkgenv" comp conf
+    (\hpi -> HcPkg.createPkgenv' hpi verbosity pkgenv)
+
+addPackageToPkgenv :: Verbosity -> Compiler -> ProgramConfiguration
+                 -> String -> InstalledPackageId -> IO ()
+addPackageToPkgenv verbosity comp conf pkgenv_name ipid =
+  withHcPkg "addPackageToPkgenv" comp conf
+    (\hpi -> HcPkg.addPackageToPkgenv' hpi verbosity pkgenv_name ipid)
+
+removePackageFromPkgenv :: Verbosity -> Compiler -> ProgramConfiguration
+                      -> String -> String
+                      -> IO ()
+removePackageFromPkgenv verbosity comp conf pkgenv_name pkg =
+  withHcPkg "removePackageFromPkgenv" comp conf
+    (\hpi -> HcPkg.removePackageFromPkgenv' hpi verbosity pkgenv_name pkg)
+
+getPackagesInPkgenv :: Verbosity -> Compiler -> ProgramConfiguration
+                  -> String -> IO [InstalledPackageId]
+getPackagesInPkgenv verbosity comp conf pkgenv_name =
+  withHcPkg "getPackagesInPkgenv" comp conf
+    (\hpi -> HcPkg.getPackagesInPkgenv' hpi verbosity pkgenv_name)
+
+listPkgenvs :: Verbosity -> Compiler -> ProgramConfiguration -> IO [String]
+listPkgenvs verbosity comp conf =
+  withHcPkg "listPkgenvs" comp conf
+    (\hpi -> HcPkg.listPkgenvs' hpi verbosity)
+
 
 registerPackage :: Verbosity
                 -> InstalledPackageInfo
@@ -340,7 +412,9 @@ generalInstalledPackageInfo adjustRelIncDirs pkg ipid lib lbi clbi installDirs =
     IPI.frameworks         = frameworks bi,
     IPI.haddockInterfaces  = [haddockdir installDirs </> haddockName pkg],
     IPI.haddockHTMLs       = [htmldir installDirs],
-    IPI.pkgRoot            = Nothing
+    IPI.pkgRoot            = Nothing,
+    IPI.isExecutable       = False,
+    IPI.isReusable         = True
   }
   where
     bi = libBuildInfo lib
@@ -361,6 +435,28 @@ generalInstalledPackageInfo adjustRelIncDirs pkg ipid lib lbi clbi installDirs =
     fixupOriginalModule (IPI.OriginalModule i m) = IPI.OriginalModule (fixupIpid i) m
     fixupIpid (InstalledPackageId []) = ipid
     fixupIpid x = x
+
+exeInstalledPackageInfo :: PackageDescription
+                        -> Executable
+                        -> ComponentLocalBuildInfo
+                        -> InstalledPackageInfo
+exeInstalledPackageInfo pkg exe clbi =
+  IPI.emptyInstalledPackageInfo {
+    IPI.installedPackageId = InstalledPackageId ("executable-" ++ exeName exe),
+    IPI.sourcePackageId    = packageId   pkg,
+    IPI.packageKey         = componentPackageKey clbi,
+    IPI.license            = license     pkg,
+    IPI.copyright          = copyright   pkg,
+    IPI.maintainer         = maintainer  pkg,
+    IPI.author             = author      pkg,
+    IPI.stability          = stability   pkg,
+    IPI.homepage           = homepage    pkg,
+    IPI.pkgUrl             = pkgUrl      pkg,
+    IPI.synopsis           = synopsis    pkg,
+    IPI.description        = description pkg,
+    IPI.category           = category    pkg,
+    IPI.isExecutable       = True
+    }
 
 -- | Construct 'InstalledPackageInfo' for a library that is in place in the
 -- build tree.
@@ -440,12 +536,12 @@ relocatableInstalledPackageInfo pkg ipid lib lbi clbi pkgroot =
 -- -----------------------------------------------------------------------------
 -- Unregistration
 
-unregister :: PackageDescription -> LocalBuildInfo -> RegisterFlags -> IO ()
-unregister pkg lbi regFlags = do
-  let pkgid     = packageId pkg
-      genScript = fromFlag (regGenScript regFlags)
+unregister :: PackageId -> PackageDBStack -> Compiler -> ProgramConfiguration
+           -> RegisterFlags -> IO ()
+unregister pkgid pkgdb comp conf regFlags = do
+  let genScript = fromFlag (regGenScript regFlags)
       verbosity = fromFlag (regVerbosity regFlags)
-      packageDb = fromFlagOrDefault (registrationPackageDB (withPackageDB lbi))
+      packageDb = fromFlagOrDefault (registrationPackageDB pkgdb)
                                     (regPackageDB regFlags)
       unreg hpi =
         let invocation = HcPkg.unregisterInvocation
@@ -456,7 +552,7 @@ unregister pkg lbi regFlags = do
              else runProgramInvocation verbosity invocation
   setupMessage verbosity "Unregistering" pkgid
   withHcPkg "unregistering is only implemented for GHC and GHCJS"
-    (compiler lbi) (withPrograms lbi) unreg
+    comp conf unreg
 
 unregScriptFileName :: FilePath
 unregScriptFileName = case buildOS of

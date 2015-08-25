@@ -534,7 +534,7 @@ simpleUserHooks =
        hscolourHook = \p l h f -> hscolour p l (allSuffixHandlers h) f,
        haddockHook  = \p l h f -> haddock  p l (allSuffixHandlers h) f,
        regHook   = defaultRegHook,
-       unregHook = \p l _ f -> unregister p l f
+       unregHook = \p l _ f -> unregister (packageId p) (withPackageDB l) (compiler l) (withPrograms l) f
       }
   where
     finalChecks _args flags pkg_descr lbi =

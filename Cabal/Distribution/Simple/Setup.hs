@@ -1084,7 +1084,9 @@ data RegisterFlags = RegisterFlags {
     regInPlace     :: Flag Bool,
     regDistPref    :: Flag FilePath,
     regPrintId     :: Flag Bool,
-    regVerbosity   :: Flag Verbosity
+    regVerbosity   :: Flag Verbosity,
+    regHidden      :: Flag Bool,
+    regPkgenv        :: Flag String
   }
   deriving Show
 
@@ -1096,7 +1098,9 @@ defaultRegisterFlags = RegisterFlags {
     regInPlace     = Flag False,
     regDistPref    = NoFlag,
     regPrintId     = Flag False,
-    regVerbosity   = Flag normal
+    regVerbosity   = Flag normal,
+    regHidden      = Flag False,
+    regPkgenv        = NoFlag
   }
 
 registerCommand :: CommandUI RegisterFlags
@@ -1141,6 +1145,15 @@ registerCommand = CommandUI
          "print the installed package ID calculated for this package"
          regPrintId (\v flags -> flags { regPrintId = v })
          trueArg
+      ,option "" ["hide-pkg"]
+         "Hides the package after registering"
+         regHidden (\v flags -> flags { regHidden = v })
+         trueArg
+      ,option "" ["add-to-pkgenv"]
+         "Adds the package to the pkgenv. Removes older version in package environment if present."
+         regPkgenv (\v flags -> flags { regPkgenv = v })
+         (reqArgFlag "PKGENV")
+
       ]
   }
 
@@ -1185,7 +1198,10 @@ instance Monoid RegisterFlags where
     regInPlace     = mempty,
     regPrintId     = mempty,
     regDistPref    = mempty,
-    regVerbosity   = mempty
+    regVerbosity   = mempty,
+    regHidden      = mempty,
+    regPkgenv        = mempty
+
   }
   mappend a b = RegisterFlags {
     regPackageDB   = combine regPackageDB,
@@ -1194,7 +1210,10 @@ instance Monoid RegisterFlags where
     regInPlace     = combine regInPlace,
     regPrintId     = combine regPrintId,
     regDistPref    = combine regDistPref,
-    regVerbosity   = combine regVerbosity
+    regVerbosity   = combine regVerbosity,
+    regHidden      = combine regHidden,
+    regPkgenv        = combine regPkgenv
+
   }
     where combine field = field a `mappend` field b
 

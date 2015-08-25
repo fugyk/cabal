@@ -22,6 +22,13 @@ module Distribution.Simple.Program.HcPkg (
     dump,
     list,
 
+    -- * Package environment operations
+    createPkgenv',
+    addPackageToPkgenv',
+    removePackageFromPkgenv',
+    getPackagesInPkgenv',
+    listPkgenvs',
+
     -- * Program invocations
     initInvocation,
     registerInvocation,
@@ -57,10 +64,13 @@ import Distribution.Verbosity
 import Distribution.Compat.Exception
          ( catchExit )
 
+import Control.Monad
+         ( when )
 import Data.Char
          ( isSpace )
 import Data.List
          ( stripPrefix )
+import qualified Data.List as List
 import System.FilePath as FilePath
          ( (</>), splitPath, splitDirectories, joinPath, isPathSeparator )
 import qualified System.FilePath.Posix as FilePath.Posix
@@ -74,6 +84,8 @@ data HcPkgInfo = HcPkgInfo
   , noVerboseFlag   :: Bool -- ^ hc-pkg does not support verbosity flags
   , flagPackageConf :: Bool -- ^ use package-conf option instead of package-db
   , useSingleFileDb :: Bool -- ^ requires single file package database
+  , supportsMultInst:: Bool -- ^ ghc-pkg supports --enable-multi-instance
+  , supportsPkgenv    :: Bool -- ^ package environments are supported.
   }
 
 -- | Call @hc-pkg@ to initialise a package database at the location {path}.
@@ -268,6 +280,83 @@ list hpi verbosity packagedb = do
   where
     parsePackageIds = sequence . map simpleParse . words
 
+-- Create a package environment from either name or symlink via filepath.
+createPkgenv' :: HcPkgInfo -> Verbosity -> Either String FilePath -> IO ()
+createPkgenv' hpi verbosity pkgenv =
+    when (supportsPkgenv hpi) $ runProgramInvocation verbosity invocation
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["pkgenv", "create", packageDbOpts hpi UserPackageDB] ++
+      case pkgenv of
+        Left name -> [name]
+        Right path -> ["--pkgenv-file", path]
+
+-- | Adds a package to the given package environment.
+addPackageToPkgenv' ::  HcPkgInfo -> Verbosity
+                 -> String -> InstalledPackageId -> IO ()
+addPackageToPkgenv' hpi verbosity pkgenv ipid = do
+    removePackageFromPkgenv' hpi verbosity pkgenv pkgid
+    when (supportsPkgenv hpi) $ runProgramInvocation verbosity invocation
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["pkgenv-modify",
+           pkgenv, "add-package",
+           "--ipid", display ipid,
+           packageDbOpts hpi UserPackageDB]
+    -- init clashes with this module's init.
+    pkgid = List.init . reverse . snd . (span (/= '-')) . reverse $
+              display ipid
+
+-- | Removes a package from the given package environment. As only one instance of package can
+-- be in a package environment we do not need ipid.
+removePackageFromPkgenv' ::  HcPkgInfo -> Verbosity
+                      -> String -> String -> IO ()
+removePackageFromPkgenv' hpi verbosity pkgenv packageId =
+    when (supportsPkgenv hpi) $ runProgramInvocation verbosity invocation
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["pkgenv-modify",
+           pkgenv,
+           "remove-package",
+           packageId,
+           packageDbOpts hpi UserPackageDB]
+
+getPackagesInPkgenv' :: HcPkgInfo -> Verbosity
+                  -> String -> IO [InstalledPackageId]
+getPackagesInPkgenv' hpi verbosity pkgenv =
+  if (supportsPkgenv hpi)
+    then do
+      output <- getProgramInvocationOutput verbosity invocation
+      case parseipids output of
+        Just ok -> return ok
+        _       -> die $ "failed to parse output of '"
+                       ++ programId (hcPkgProgram hpi)
+                       ++ List.intercalate " " args ++ "'"
+    else die "Packag Environment not supported"
+
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["pkgenv",
+           "list-packages",
+           pkgenv,
+           packageDbOpts hpi UserPackageDB]
+    parseipids = sequence . map simpleParse . lines
+
+listPkgenvs' :: HcPkgInfo -> Verbosity -> IO [String]
+listPkgenvs' hpi verbosity =
+  if (supportsPkgenv hpi)
+    then do
+      output <- getProgramInvocationOutput verbosity invocation
+      return (parseipids output)
+    else die "Package Environment not supported"
+
+  where
+    invocation = programInvocation (hcPkgProgram hpi) args
+    args = ["list-pkgenvs",
+           "--simple-output",
+           packageDbOpts hpi UserPackageDB]
+    parseipids = lines
+
 --------------------------
 -- The program invocations
 --
@@ -293,11 +382,14 @@ registerInvocation' :: String -> HcPkgInfo -> Verbosity -> PackageDBStack
 registerInvocation' cmdname hpi verbosity packagedbs (Left pkgFile) =
     programInvocation (hcPkgProgram hpi) args
   where
-    args = [cmdname, pkgFile]
+    args' = [cmdname, pkgFile]
         ++ (if noPkgDbStack hpi
               then [packageDbOpts hpi (last packagedbs)]
               else packageDbStackOpts hpi packagedbs)
         ++ verbosityOpts hpi verbosity
+    args = (if supportsMultInst hpi
+              then args' ++ ["--enable-multi-instance"]
+              else args')
 
 registerInvocation' cmdname hpi verbosity packagedbs (Right pkgInfo) =
     (programInvocation (hcPkgProgram hpi) args) {
@@ -305,12 +397,14 @@ registerInvocation' cmdname hpi verbosity packagedbs (Right pkgInfo) =
       progInvokeInputEncoding = IOEncodingUTF8
     }
   where
-    args = [cmdname, "-"]
+    args' = [cmdname, "-"]
         ++ (if noPkgDbStack hpi
               then [packageDbOpts hpi (last packagedbs)]
               else packageDbStackOpts hpi packagedbs)
         ++ verbosityOpts hpi verbosity
-
+    args = (if supportsMultInst hpi
+              then args' ++ ["--enable-multi-instance"]
+              else args')
 
 unregisterInvocation :: HcPkgInfo -> Verbosity -> PackageDB -> PackageId
                      -> ProgramInvocation

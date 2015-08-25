@@ -327,7 +327,8 @@ instance Monoid SavedConfig where
         -- TODO: NubListify
         configPreferences   = lastNonEmpty configPreferences,
         configSolver        = combine configSolver,
-        configAllowNewer    = combine configAllowNewer
+        configAllowNewer    = combine configAllowNewer,
+        configPkgenv          = combine configPkgenv
         }
         where
           combine      = combine' savedConfigureExFlags
@@ -433,6 +434,9 @@ initialSavedConfig = do
     },
     savedConfigureFlags  = mempty {
       configProgramPathExtra = toNubList extraPath
+    },
+    savedConfigureExFlags = mempty {
+      configPkgenv             = toFlag "default"
     },
     savedInstallFlags    = mempty {
       installSummaryFile = toNubList [toPathTemplate (logsDir </> "build.log")],

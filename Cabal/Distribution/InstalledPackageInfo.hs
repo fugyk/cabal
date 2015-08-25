@@ -108,7 +108,10 @@ data InstalledPackageInfo
         frameworks        :: [String],
         haddockInterfaces :: [FilePath],
         haddockHTMLs      :: [FilePath],
-        pkgRoot           :: Maybe FilePath
+        pkgRoot           :: Maybe FilePath,
+        isExecutable      :: Bool,
+        isReusable        :: Bool  -- Source package built inside sandbox is
+                                   -- not reusable by other packages
     }
     deriving (Generic, Read, Show)
 
@@ -163,7 +166,9 @@ emptyInstalledPackageInfo
         frameworks        = [],
         haddockInterfaces = [],
         haddockHTMLs      = [],
-        pkgRoot           = Nothing
+        pkgRoot           = Nothing,
+        isExecutable      = False,
+        isReusable        = True
     }
 
 noVersion :: Version
@@ -386,6 +391,11 @@ installedFieldDescrs = [
  , simpleField "pkgroot"
         (const Disp.empty)        parseFilePathQ
         (fromMaybe "" . pkgRoot)  (\xs pkg -> pkg{pkgRoot=Just xs})
+ , boolField "executable"
+        isExecutable       (\val pkg -> pkg{isExecutable=val})
+ , boolField   "reusable"
+        isReusable         (\val pkg -> pkg{isReusable=val})
+
  ]
 
 deprecatedFieldDescrs :: [FieldDescr InstalledPackageInfo]

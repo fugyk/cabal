@@ -102,5 +102,7 @@ toCurrent ipi@InstalledPackageInfo{} =
     Current.frameworks         = frameworks ipi,
     Current.haddockInterfaces  = haddockInterfaces ipi,
     Current.haddockHTMLs       = haddockHTMLs ipi,
-    Current.pkgRoot            = Nothing
+    Current.pkgRoot            = Nothing,
+    Current.isExecutable       = False,
+    Current.isReusable         = True
   }

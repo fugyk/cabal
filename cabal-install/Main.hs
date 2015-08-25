@@ -23,6 +23,7 @@ import Distribution.Client.Setup
          , buildCommand, replCommand, testCommand, benchmarkCommand
          , InstallFlags(..), defaultInstallFlags
          , installCommand, upgradeCommand, uninstallCommand
+         , gcCommand, upgradeAllCommand
          , FetchFlags(..), fetchCommand
          , FreezeFlags(..), freezeCommand
          , GetFlags(..), getCommand, unpackCommand
@@ -73,6 +74,7 @@ import Distribution.Client.Fetch              (fetch)
 import Distribution.Client.Freeze             (freeze)
 import Distribution.Client.Check as Check     (check)
 --import Distribution.Client.Clean            (clean)
+import Distribution.Client.GC                 (gcAction)
 import Distribution.Client.Upload as Upload   (upload, check, report)
 import Distribution.Client.Run                (run, splitRunArgs)
 import Distribution.Client.HttpUtils          (configureTransport)
@@ -131,6 +133,8 @@ import Distribution.Simple.Command
          , commandsRun, commandAddAction, hiddenCommand )
 import Distribution.Simple.Compiler
          ( Compiler(..) )
+import Distribution.Simple.Register
+         ( getPackagesInPkgenv, removePackageFromPkgenv )
 import Distribution.Simple.Configure
          ( checkPersistBuildConfigOutdated, configCompilerAuxEx
          , ConfigStateFileError(..), localBuildInfoFile
@@ -260,6 +264,8 @@ mainWorker args = topHandler $
                      regVerbosity      regDistPref
       ,testCommand            `commandAddAction` testAction
       ,benchmarkCommand       `commandAddAction` benchmarkAction
+      ,upgradeAllCommand      `commandAddAction` upgradeAllAction
+      ,gcCommand              `commandAddAction` gcAction
       ,hiddenCommand $
        uninstallCommand       `commandAddAction` uninstallAction
       ,hiddenCommand $
@@ -306,7 +312,7 @@ configureAction (configFlags, configExFlags) extraArgs globalFlags = do
   let configFlags''  = case useSandbox of
         NoSandbox               -> configFlags'
         (UseSandbox sandboxDir) -> setPackageDB sandboxDir
-                                   comp platform configFlags'
+                                   comp platform configFlags' conf
 
   whenUsingSandbox useSandbox $ \sandboxDir -> do
     initPackageDBIfNeeded verbosity configFlags'' comp conf
@@ -709,8 +715,8 @@ installAction (configFlags, configExFlags, installFlags, haddockFlags)
   -- timestamp record for this compiler to the timestamp file.
   configFlags'' <- case useSandbox of
     NoSandbox               -> configAbsolutePaths $ configFlags'
-    (UseSandbox sandboxDir) -> return $ setPackageDB sandboxDir comp platform configFlags'
-
+    (UseSandbox sandboxDir) ->
+      return $ setPackageDB sandboxDir comp platform configFlags' conf
   whenUsingSandbox useSandbox $ \sandboxDir -> do
     initPackageDBIfNeeded verbosity configFlags'' comp conf'
 
@@ -843,6 +849,7 @@ benchmarkAction (benchmarkFlags, buildFlags, buildExFlags)
         setupWrapper verbosity setupOptions Nothing
           Cabal.benchmarkCommand (const benchmarkFlags') extraArgs'
 
+
 haddockAction :: HaddockFlags -> [String] -> GlobalFlags -> IO ()
 haddockAction haddockFlags extraArgs globalFlags = do
   let verbosity = fromFlag (haddockVerbosity haddockFlags)
@@ -939,6 +946,22 @@ upgradeAction _ _ _ = die $
  ++ "--upgrade-dependencies, it is recommended that you do not upgrade core "
  ++ "packages (e.g. by using appropriate --constraint= flags)."
 
+upgradeAllAction :: Flag Verbosity -> [String] -> GlobalFlags -> IO ()
+upgradeAllAction verbosityFlag _ globalFlags = do
+  let verbosity = fromFlag verbosityFlag
+  savedConfig <- fmap snd $ loadConfigOrSandboxConfig verbosity globalFlags
+  (comp, _, conf) <- configCompilerAux' (savedConfigureFlags savedConfig)
+  let pkgenv = fromFlag (configPkgenv $ savedConfigureExFlags savedConfig)
+  pkgs <- getPackagesInPkgenv verbosity comp conf pkgenv
+  print pkgs
+  -- let pkgs' = filter (/= sorcePackage) pkgs
+  -- pkgs'' <- map applyWorldRestrictions pkgs
+  installAction (Cabal.defaultConfigFlags conf,
+                 defaultConfigExFlags,
+                 defaultInstallFlags { installUpgradeDeps = toFlag True },
+                 defaultHaddockFlags) [] globalFlags
+  -- where ipidToArg = init . reverse . snd . (span (/= '-')) . reverse . display
+
 fetchAction :: FetchFlags -> [String] -> GlobalFlags -> IO ()
 fetchAction fetchFlags extraArgs globalFlags = do
   let verbosity = fromFlag (fetchVerbosity fetchFlags)
@@ -1030,15 +1053,12 @@ formatAction verbosityFlag extraArgs _globalFlags = do
   writeGenericPackageDescription path pkgDesc
 
 uninstallAction :: Flag Verbosity -> [String] -> GlobalFlags -> IO ()
-uninstallAction _verbosityFlag extraArgs _globalFlags = do
-  let package = case extraArgs of
-        p:_ -> p
-        _   -> "PACKAGE_NAME"
-  die $ "This version of 'cabal-install' does not support the 'uninstall' operation. "
-        ++ "It will likely be implemented at some point in the future; in the meantime "
-        ++ "you're advised to use either 'ghc-pkg unregister " ++ package ++ "' or "
-        ++ "'cabal sandbox hc-pkg -- unregister " ++ package ++ "'."
-
+uninstallAction verbosityFlag extraArgs globalFlags = do
+  let verbosity = fromFlag verbosityFlag
+  savedConfig <- fmap snd $ loadConfigOrSandboxConfig verbosity globalFlags
+  (comp, _, conf) <- configCompilerAux' (savedConfigureFlags savedConfig)
+  let pkgenv = fromFlag (configPkgenv $ savedConfigureExFlags savedConfig)
+  mapM_ (removePackageFromPkgenv verbosity comp conf pkgenv) extraArgs
 
 sdistAction :: (SDistFlags, SDistExFlags) -> [String] -> GlobalFlags -> IO ()
 sdistAction (sdistFlags, sdistExFlags) extraArgs globalFlags = do
